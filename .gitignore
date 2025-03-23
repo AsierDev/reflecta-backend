@@ -1,0 +1,26 @@
+# Node
+node_modules/
+dist/
+build/
+coverage/
+
+# Env
+.env
+.env.local
+.env.*.local
+.env.test
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# Sistema
+.DS_Store
+
+# Database
+prisma/*.db
+prisma/*.db-journal
