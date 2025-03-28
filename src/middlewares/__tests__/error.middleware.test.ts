@@ -46,7 +46,7 @@ describe('Error Middleware', () => {
     error.statusCode = 400;
 
     // Execute middleware
-    errorHandler(error, mockRequest as Request, mockResponse as Response, nextFunction);
+    errorHandler(error, mockRequest as Request, mockResponse as Response);
 
     // Verify that the provided status code was used
     expect(mockResponse.status).toHaveBeenCalledWith(400);
@@ -75,7 +75,7 @@ describe('Error Middleware', () => {
     const error: AppError = new Error('Server error') as AppError;
 
     // Execute middleware
-    errorHandler(error, mockRequest as Request, mockResponse as Response, nextFunction);
+    errorHandler(error, mockRequest as Request, mockResponse as Response);
 
     // Verify that the default status code (500) was used
     expect(mockResponse.status).toHaveBeenCalledWith(500);
@@ -97,7 +97,7 @@ describe('Error Middleware', () => {
     };
 
     // Execute middleware
-    errorHandler(error, mockRequest as Request, mockResponse as Response, nextFunction);
+    errorHandler(error, mockRequest as Request, mockResponse as Response);
 
     // Verify error response with details
     expect(mockResponse.json).toHaveBeenCalledWith({
@@ -119,7 +119,7 @@ describe('Error Middleware', () => {
     error.stack = 'Simulated stack trace';
 
     // Execute middleware
-    errorHandler(error, mockRequest as Request, mockResponse as Response, nextFunction);
+    errorHandler(error, mockRequest as Request, mockResponse as Response);
 
     // Verify that stack trace is included in development
     expect(mockResponse.json).toHaveBeenCalledWith({
@@ -138,7 +138,7 @@ describe('Error Middleware', () => {
     error.stack = 'Simulated stack trace';
 
     // Execute middleware
-    errorHandler(error, mockRequest as Request, mockResponse as Response, nextFunction);
+    errorHandler(error, mockRequest as Request, mockResponse as Response);
 
     // Verify that stack trace is NOT included in production
     expect(mockResponse.json).toHaveBeenCalledWith({
