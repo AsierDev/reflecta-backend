@@ -1,5 +1,6 @@
 import entryService from '../entry.service';
 import logger from '../../utils/logger';
+import prisma from '../../lib/prisma';
 
 // Logger mock
 jest.mock('../../utils/logger', () => ({
@@ -9,30 +10,21 @@ jest.mock('../../utils/logger', () => ({
   debug: jest.fn()
 }));
 
-// PrismaClient mock
-jest.mock('@prisma/client', () => {
-  const mockEntryFunctions = {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findFirst: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-    count: jest.fn()
-  };
-
-  return {
-    PrismaClient: jest.fn().mockImplementation(() => ({
-      entry: mockEntryFunctions,
-      $connect: jest.fn(),
-      $disconnect: jest.fn()
-    }))
-  };
-});
-
-// Get PrismaClient mock
-const { PrismaClient } = jest.requireMock('@prisma/client');
-const mockPrismaClient = new PrismaClient();
+// Initialize Prisma mock functions
+jest.mock('../../lib/prisma', () => ({
+  __esModule: true,
+  default: {
+    entry: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      count: jest.fn()
+    }
+  }
+}));
 
 describe('EntryService', () => {
   // Test data
@@ -78,7 +70,7 @@ describe('EntryService', () => {
       };
 
       // Configure mock for entry creation
-      mockPrismaClient.entry.create.mockResolvedValue({
+      (prisma.entry.create as jest.Mock).mockResolvedValue({
         ...testEntry,
         title: entryData.title,
         content: entryData.content,
@@ -89,7 +81,7 @@ describe('EntryService', () => {
       const result = await entryService.createEntry(entryData);
 
       // Verify that entry was created with the correct data
-      expect(mockPrismaClient.entry.create).toHaveBeenCalledWith({
+      expect(prisma.entry.create).toHaveBeenCalledWith({
         data: {
           title: entryData.title,
           content: entryData.content,
@@ -122,7 +114,7 @@ describe('EntryService', () => {
 
       // Configure mock to throw error
       const errorMsg = 'Prisma error when creating entry';
-      mockPrismaClient.entry.create.mockRejectedValue(new Error(errorMsg));
+      (prisma.entry.create as jest.Mock).mockRejectedValue(new Error(errorMsg));
 
       // Execute and verify it throws error
       await expect(entryService.createEntry(entryData)).rejects.toThrow(
@@ -143,18 +135,18 @@ describe('EntryService', () => {
   describe('getEntries', () => {
     test('should get entries with default pagination', async () => {
       // Configure mocks
-      mockPrismaClient.entry.count.mockResolvedValue(10);
-      mockPrismaClient.entry.findMany.mockResolvedValue(testEntries);
+      (prisma.entry.count as jest.Mock).mockResolvedValue(10);
+      (prisma.entry.findMany as jest.Mock).mockResolvedValue(testEntries);
 
       // Execute method
       const result = await entryService.getEntries({ userId });
 
       // Verify Prisma calls
-      expect(mockPrismaClient.entry.count).toHaveBeenCalledWith({
+      expect(prisma.entry.count).toHaveBeenCalledWith({
         where: { userId }
       });
 
-      expect(mockPrismaClient.entry.findMany).toHaveBeenCalledWith({
+      expect(prisma.entry.findMany).toHaveBeenCalledWith({
         where: { userId },
         include: { tags: true },
         orderBy: { createdAt: 'desc' },
@@ -187,32 +179,32 @@ describe('EntryService', () => {
       };
 
       // Configure mocks
-      mockPrismaClient.entry.count.mockResolvedValue(15);
-      mockPrismaClient.entry.findMany.mockResolvedValue([testEntries[1]]);
+      (prisma.entry.count as jest.Mock).mockResolvedValue(15);
+      (prisma.entry.findMany as jest.Mock).mockResolvedValue([testEntries[1]]);
 
       // Execute method
       const result = await entryService.getEntries(searchParams);
 
       // Verify Prisma calls with correct filters
-      expect(mockPrismaClient.entry.count).toHaveBeenCalledWith({
+      expect(prisma.entry.count).toHaveBeenCalledWith({
         where: {
           userId,
           OR: [{ title: { contains: 'test' } }, { content: { contains: 'test' } }]
         }
       });
 
-      expect(mockPrismaClient.entry.findMany).toHaveBeenCalledWith({
+      expect(prisma.entry.findMany).toHaveBeenCalledWith({
         where: {
           userId,
           OR: [{ title: { contains: 'test' } }, { content: { contains: 'test' } }]
         },
         include: { tags: true },
         orderBy: { createdAt: 'asc' },
-        skip: 5, // (page 2 - 1) * limit 5
+        skip: 5,
         take: 5
       });
 
-      // Verify result (updated to match implementation calculated values)
+      // Verify result
       expect(result).toEqual({
         entries: [testEntries[1]],
         pagination: {
@@ -220,46 +212,38 @@ describe('EntryService', () => {
           page: 2,
           limit: 5,
           totalPages: 3,
-          hasNextPage: true, // Corrected from false to true (page 2 of 3 has next page)
+          hasNextPage: true,
           hasPrevPage: true
         }
       });
     });
 
     test('should filter by tagId correctly', async () => {
-      // Parameters with tag filter
-      const tagParams = {
+      // Search parameters with tagId
+      const searchParams = {
         userId,
         tagId: 'tag-1'
       };
 
       // Configure mocks
-      mockPrismaClient.entry.count.mockResolvedValue(2);
-      mockPrismaClient.entry.findMany.mockResolvedValue(testEntries);
+      (prisma.entry.count as jest.Mock).mockResolvedValue(1);
+      (prisma.entry.findMany as jest.Mock).mockResolvedValue([testEntry]);
 
       // Execute method
-      const result = await entryService.getEntries(tagParams);
+      const result = await entryService.getEntries(searchParams);
 
       // Verify Prisma calls with tag filter
-      expect(mockPrismaClient.entry.count).toHaveBeenCalledWith({
+      expect(prisma.entry.count).toHaveBeenCalledWith({
         where: {
           userId,
-          tags: {
-            some: {
-              id: 'tag-1'
-            }
-          }
+          tags: { some: { id: 'tag-1' } }
         }
       });
 
-      expect(mockPrismaClient.entry.findMany).toHaveBeenCalledWith({
+      expect(prisma.entry.findMany).toHaveBeenCalledWith({
         where: {
           userId,
-          tags: {
-            some: {
-              id: 'tag-1'
-            }
-          }
+          tags: { some: { id: 'tag-1' } }
         },
         include: { tags: true },
         orderBy: { createdAt: 'desc' },
@@ -267,12 +251,14 @@ describe('EntryService', () => {
         take: 10
       });
 
-      expect(result.entries).toEqual(testEntries);
+      // Verify result
+      expect(result.entries).toEqual([testEntry]);
     });
 
     test('should handle error when getting entries', async () => {
       // Configure mock to throw error
-      mockPrismaClient.entry.count.mockRejectedValue(new Error('Database error'));
+      const errorMsg = 'Database error';
+      (prisma.entry.count as jest.Mock).mockRejectedValue(new Error(errorMsg));
 
       // Execute and verify it throws error
       await expect(entryService.getEntries({ userId })).rejects.toThrow(
@@ -283,8 +269,8 @@ describe('EntryService', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Error getting entries in service',
         expect.objectContaining({
-          error: 'Database error',
-          userId
+          error: errorMsg,
+          userId: userId
         })
       );
     });
@@ -293,13 +279,13 @@ describe('EntryService', () => {
   describe('getEntryById', () => {
     test('should get an entry by ID successfully', async () => {
       // Configure mock
-      mockPrismaClient.entry.findFirst.mockResolvedValue(testEntry);
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(testEntry);
 
       // Execute method
       const result = await entryService.getEntryById(entryId, userId);
 
       // Verify Prisma call
-      expect(mockPrismaClient.entry.findFirst).toHaveBeenCalledWith({
+      expect(prisma.entry.findFirst).toHaveBeenCalledWith({
         where: {
           id: entryId,
           userId
@@ -314,16 +300,16 @@ describe('EntryService', () => {
     });
 
     test('should throw error if entry does not exist', async () => {
-      // Configure mock for no entry found
-      mockPrismaClient.entry.findFirst.mockResolvedValue(null);
+      // Configure mock to return null
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(null);
 
-      // Execute and verify it throws error
+      // Execute and verify error
       await expect(entryService.getEntryById('non-existent-id', userId)).rejects.toThrow(
-        'Error getting entry'
+        'Entry not found'
       );
 
       // Verify Prisma call
-      expect(mockPrismaClient.entry.findFirst).toHaveBeenCalledWith({
+      expect(prisma.entry.findFirst).toHaveBeenCalledWith({
         where: {
           id: 'non-existent-id',
           userId
@@ -336,9 +322,10 @@ describe('EntryService', () => {
 
     test('should handle database errors', async () => {
       // Configure mock to throw error
-      mockPrismaClient.entry.findFirst.mockRejectedValue(new Error('Database error'));
+      const errorMsg = 'Database error';
+      (prisma.entry.findFirst as jest.Mock).mockRejectedValue(new Error(errorMsg));
 
-      // Execute and verify it throws error
+      // Execute and verify error
       await expect(entryService.getEntryById(entryId, userId)).rejects.toThrow(
         'Error getting entry'
       );
@@ -347,7 +334,7 @@ describe('EntryService', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Error getting entry by ID in service',
         expect.objectContaining({
-          error: 'Database error',
+          error: errorMsg,
           entryId,
           userId
         })
@@ -357,7 +344,7 @@ describe('EntryService', () => {
 
   describe('updateEntry', () => {
     test('should update an entry successfully', async () => {
-      // Data to update
+      // Update data
       const updateData = {
         title: 'Updated Title',
         content: 'Updated content',
@@ -365,8 +352,8 @@ describe('EntryService', () => {
       };
 
       // Configure mocks
-      mockPrismaClient.entry.findFirst.mockResolvedValue(testEntry);
-      mockPrismaClient.entry.update.mockResolvedValue({
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(testEntry);
+      (prisma.entry.update as jest.Mock).mockResolvedValue({
         ...testEntry,
         ...updateData,
         tags: [{ id: 'tag-3' }, { id: 'tag-4' }]
@@ -375,16 +362,15 @@ describe('EntryService', () => {
       // Execute method
       const result = await entryService.updateEntry(entryId, userId, updateData);
 
-      // Verify entry is first searched
-      expect(mockPrismaClient.entry.findFirst).toHaveBeenCalledWith({
+      // Verify Prisma calls
+      expect(prisma.entry.findFirst).toHaveBeenCalledWith({
         where: {
           id: entryId,
           userId
         }
       });
 
-      // Verify entry is updated
-      expect(mockPrismaClient.entry.update).toHaveBeenCalledWith({
+      expect(prisma.entry.update).toHaveBeenCalledWith({
         where: { id: entryId },
         data: {
           title: updateData.title,
@@ -402,60 +388,54 @@ describe('EntryService', () => {
       // Verify result
       expect(result).toEqual({
         ...testEntry,
-        title: updateData.title,
-        content: updateData.content,
+        ...updateData,
         tags: [{ id: 'tag-3' }, { id: 'tag-4' }]
       });
     });
 
     test('should throw error if entry does not exist', async () => {
-      // Configure mock to not find entry
-      mockPrismaClient.entry.findFirst.mockResolvedValue(null);
+      // Configure mock to return null
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(null);
 
-      // Data to update
-      const updateData = {
-        title: 'Updated Title',
-        content: 'Updated content'
-      };
-
-      // Execute and verify it throws error
-      await expect(entryService.updateEntry('non-existent-id', userId, updateData)).rejects.toThrow(
-        'Error updating entry'
-      );
+      // Execute and verify error
+      await expect(
+        entryService.updateEntry('non-existent-id', userId, { 
+          title: 'New Title',
+          content: 'New Content'
+        })
+      ).rejects.toThrow('Entry not found');
 
       // Verify entry was searched
-      expect(mockPrismaClient.entry.findFirst).toHaveBeenCalledWith({
+      expect(prisma.entry.findFirst).toHaveBeenCalledWith({
         where: {
           id: 'non-existent-id',
           userId
         }
       });
 
-      // Verify update was not attempted
-      expect(mockPrismaClient.entry.update).not.toHaveBeenCalled();
+      // Verify update wasn't attempted
+      expect(prisma.entry.update).not.toHaveBeenCalled();
     });
 
     test('should handle errors when updating', async () => {
       // Configure mocks
-      mockPrismaClient.entry.findFirst.mockResolvedValue(testEntry);
-      mockPrismaClient.entry.update.mockRejectedValue(new Error('Database error'));
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(testEntry);
+      const errorMsg = 'Database error';
+      (prisma.entry.update as jest.Mock).mockRejectedValue(new Error(errorMsg));
 
-      // Data to update
-      const updateData = {
-        title: 'Updated Title',
-        content: 'Updated content'
-      };
-
-      // Execute and verify it throws error
-      await expect(entryService.updateEntry(entryId, userId, updateData)).rejects.toThrow(
-        'Error updating entry'
-      );
+      // Execute and verify error
+      await expect(
+        entryService.updateEntry(entryId, userId, { 
+          title: 'New Title',
+          content: 'New Content'
+        })
+      ).rejects.toThrow('Error updating entry');
 
       // Verify logger was called with error
       expect(logger.error).toHaveBeenCalledWith(
         'Error updating entry in service',
         expect.objectContaining({
-          error: 'Database error',
+          error: errorMsg,
           entryId,
           userId
         })
@@ -466,22 +446,21 @@ describe('EntryService', () => {
   describe('deleteEntry', () => {
     test('should delete an entry successfully', async () => {
       // Configure mocks
-      mockPrismaClient.entry.findFirst.mockResolvedValue(testEntry);
-      mockPrismaClient.entry.delete.mockResolvedValue(testEntry);
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(testEntry);
+      (prisma.entry.delete as jest.Mock).mockResolvedValue(testEntry);
 
       // Execute method
       const result = await entryService.deleteEntry(entryId, userId);
 
-      // Verify entry is first searched
-      expect(mockPrismaClient.entry.findFirst).toHaveBeenCalledWith({
+      // Verify Prisma calls
+      expect(prisma.entry.findFirst).toHaveBeenCalledWith({
         where: {
           id: entryId,
           userId
         }
       });
 
-      // Verify entry is deleted
-      expect(mockPrismaClient.entry.delete).toHaveBeenCalledWith({
+      expect(prisma.entry.delete).toHaveBeenCalledWith({
         where: { id: entryId }
       });
 
@@ -490,32 +469,33 @@ describe('EntryService', () => {
     });
 
     test('should throw error if entry does not exist', async () => {
-      // Configure mock to not find entry
-      mockPrismaClient.entry.findFirst.mockResolvedValue(null);
+      // Configure mock to return null
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(null);
 
-      // Execute and verify it throws error
-      await expect(entryService.deleteEntry('non-existent-id', userId)).rejects.toThrow(
-        'Error deleting entry'
-      );
+      // Execute and verify error
+      await expect(
+        entryService.deleteEntry('non-existent-id', userId)
+      ).rejects.toThrow('Entry not found');
 
       // Verify entry was searched
-      expect(mockPrismaClient.entry.findFirst).toHaveBeenCalledWith({
+      expect(prisma.entry.findFirst).toHaveBeenCalledWith({
         where: {
           id: 'non-existent-id',
           userId
         }
       });
 
-      // Verify delete was not attempted
-      expect(mockPrismaClient.entry.delete).not.toHaveBeenCalled();
+      // Verify delete wasn't attempted
+      expect(prisma.entry.delete).not.toHaveBeenCalled();
     });
 
     test('should handle errors when deleting', async () => {
       // Configure mocks
-      mockPrismaClient.entry.findFirst.mockResolvedValue(testEntry);
-      mockPrismaClient.entry.delete.mockRejectedValue(new Error('Database error'));
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(testEntry);
+      const errorMsg = 'Database error';
+      (prisma.entry.delete as jest.Mock).mockRejectedValue(new Error(errorMsg));
 
-      // Execute and verify it throws error
+      // Execute and verify error
       await expect(entryService.deleteEntry(entryId, userId)).rejects.toThrow(
         'Error deleting entry'
       );
@@ -524,7 +504,7 @@ describe('EntryService', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Error deleting entry in service',
         expect.objectContaining({
-          error: 'Database error',
+          error: errorMsg,
           entryId,
           userId
         })
@@ -534,29 +514,22 @@ describe('EntryService', () => {
 
   describe('getEntryForExport', () => {
     test('should export an entry successfully', async () => {
-      // Create spy for getEntryById
-      const getEntryByIdSpy = jest.spyOn(entryService, 'getEntryById');
-      getEntryByIdSpy.mockResolvedValue(testEntry);
+      // Configure mock
+      (prisma.entry.findFirst as jest.Mock).mockResolvedValue(testEntry);
 
       // Execute method
       const result = await entryService.getEntryForExport(entryId, userId);
 
-      // Verify getEntryById was called
-      expect(getEntryByIdSpy).toHaveBeenCalledWith(entryId, userId);
-
       // Verify result
       expect(result).toEqual(testEntry);
-
-      // Restore spy
-      getEntryByIdSpy.mockRestore();
     });
 
     test('should handle errors when exporting', async () => {
-      // Create spy for getEntryById
-      const getEntryByIdSpy = jest.spyOn(entryService, 'getEntryById');
-      getEntryByIdSpy.mockRejectedValue(new Error('Database error'));
+      // Configure mock to throw error
+      const errorMsg = 'Database error';
+      (prisma.entry.findFirst as jest.Mock).mockRejectedValue(new Error(errorMsg));
 
-      // Execute and verify it throws error
+      // Execute and verify error
       await expect(entryService.getEntryForExport(entryId, userId)).rejects.toThrow(
         'Error exporting entry'
       );
@@ -565,14 +538,11 @@ describe('EntryService', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Error exporting entry in service',
         expect.objectContaining({
-          error: 'Database error',
+          error: errorMsg,
           entryId,
           userId
         })
       );
-
-      // Restore spy
-      getEntryByIdSpy.mockRestore();
     });
   });
 });

@@ -1,9 +1,7 @@
 import request from 'supertest';
 import app from '../app';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { cleanupDatabase, setupTestDatabase } from '../utils/test-utils';
-
-const prisma = new PrismaClient();
 
 describe('Auth API Integration Tests', () => {
   let authToken: string;

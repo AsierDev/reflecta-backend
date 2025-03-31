@@ -142,6 +142,9 @@ class EntryService {
 
       return entry;
     } catch (error) {
+      if (error instanceof Error && error.message === 'Entry not found') {
+        throw error;
+      }
       if (error instanceof Error) {
         logger.error('Error getting entry by ID in service', {
           error: error.message,
@@ -202,6 +205,9 @@ class EntryService {
 
       return updatedEntry;
     } catch (error) {
+      if (error instanceof Error && error.message === 'Entry not found') {
+        throw error;
+      }
       if (error instanceof Error) {
         logger.error('Error updating entry in service', { error: error.message, entryId, userId });
       } else {
@@ -235,6 +241,9 @@ class EntryService {
 
       return true;
     } catch (error) {
+      if (error instanceof Error && error.message === 'Entry not found') {
+        throw error;
+      }
       if (error instanceof Error) {
         logger.error('Error deleting entry in service', { error: error.message, entryId, userId });
       } else {
@@ -249,9 +258,25 @@ class EntryService {
    */
   async getEntryForExport(entryId: string, userId: string) {
     try {
-      const entry = await this.getEntryById(entryId, userId);
+      const entry = await prisma.entry.findFirst({
+        where: {
+          id: entryId,
+          userId
+        },
+        include: {
+          tags: true
+        }
+      });
+
+      if (!entry) {
+        throw new Error('Entry not found');
+      }
+
       return entry;
     } catch (error) {
+      if (error instanceof Error && error.message === 'Entry not found') {
+        throw error;
+      }
       if (error instanceof Error) {
         logger.error('Error exporting entry in service', { error: error.message, entryId, userId });
       } else {
